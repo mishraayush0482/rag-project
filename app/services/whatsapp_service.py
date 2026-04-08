@@ -1,6 +1,14 @@
-from twilio.twiml.messaging_response import MessagingResponse
+from fastapi import APIRouter, Form
+from fastapi.responses import Response
+from app.services.rag_service import query_rag
 
-def format_whatsapp_response(text: str):
-    resp = MessagingResponse()
-    resp.message(text)
-    return str(resp)
+router = APIRouter()
+
+@router.post("/whatsapp")
+async def whatsapp_webhook(Body: str = Form(...), From: str = Form(...)):
+    response_text = query_rag(Body, user_id=From)
+
+    return Response(
+        content=f"<Response><Message>{response_text}</Message></Response>",
+        media_type="application/xml"
+    )

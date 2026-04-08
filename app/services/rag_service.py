@@ -63,7 +63,7 @@ class RAGService:
                 request_timeout=30
             )
 
-            # ✅ Strong prompt
+            # ✅ Prompt
             prompt_template = """
 You are a helpful AI assistant.
 
@@ -85,13 +85,13 @@ Answer:
                 input_variables=["context", "question"]
             )
 
-            # ✅ Cleaner retriever (LESS NOISE)
+            # ✅ Retriever
             retriever = vector_store.as_retriever(
                 search_type="similarity",
                 search_kwargs={"k": 3}
             )
 
-            # ✅ Build chain
+            # ✅ Chain
             self.qa_chain = ConversationalRetrievalChain.from_llm(
                 llm=llm,
                 retriever=retriever,
@@ -104,7 +104,7 @@ Answer:
         except Exception as e:
             logger.error(f"❌ RAG init failed: {e}")
 
-    # ✅ Query
+    # ✅ Query (MULTILINGUAL FIXED)
     def query(self, text: str, user_id: str):
         try:
             if not self.qa_chain:
@@ -112,21 +112,20 @@ Answer:
 
             memory = self.get_memory(user_id)
 
-            # ✅ Detect language
-            lang = self.translator.detect_lang(text)
-            print(f"\n🌍 Detected Language: {lang}")
+            # 🌍 Detect language
+            source_lang = self.translator.detect_lang(text)
+            print(f"\n🌍 Detected Language: {source_lang}")
 
             original_text = text
 
-            # ❗ ONLY translate if Hindi
-            if lang == "hi":
-                text = self.translator.hinglish_to_english(text)
+            # 🔄 Convert ANY language → English
+            if source_lang != "en":
+                text = self.translator.translate(text, source_lang, "en")
 
             text = text.lower().strip()
+            print(f"🔄 Query (EN): {text}")
 
-            print(f"🔄 Query: {text}")
-
-            # ✅ Debug retrieval
+            # 🔍 Debug retrieval
             docs = self.qa_chain.retriever.get_relevant_documents(text)
 
             print("\n🔍 Retrieved Docs:\n")
@@ -135,7 +134,7 @@ Answer:
                 print(d.page_content[:200])
                 print()
 
-            # ✅ Ask LLM
+            # 🤖 Ask LLM
             response = self.qa_chain.invoke({
                 "question": text,
                 "chat_history": memory.chat_memory.messages
@@ -144,13 +143,13 @@ Answer:
             answer = response["answer"]
             print("\n🤖 English Answer:", answer)
 
-            # ✅ Translate back if needed
-            if lang == "hi":
-                answer = self.translator.translate(answer, "en", "hi")
+            # 🌍 Convert back to ORIGINAL language
+            if source_lang != "en":
+                answer = self.translator.translate(answer, "en", source_lang)
 
             print("\n🌍 Final Answer:", answer)
 
-            # ✅ Save memory
+            # 💾 Save memory
             memory.chat_memory.add_user_message(original_text)
             memory.chat_memory.add_ai_message(answer)
 
@@ -159,3 +158,19 @@ Answer:
         except Exception as e:
             print(f"❌ Query failed: {e}")
             return "Error processing request"
+
+
+# ================= GLOBAL RAG INSTANCE =================
+
+rag_instance = None
+
+
+def set_rag_instance(instance):
+    global rag_instance
+    rag_instance = instance
+
+
+def query_rag(text: str, user_id: str):
+    if rag_instance is None:
+        return "System not ready"
+    return rag_instance.query(text, user_id)

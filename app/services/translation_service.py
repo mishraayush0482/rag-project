@@ -14,32 +14,33 @@ class TranslationService:
             request_timeout=30
         )
 
-    # ✅ Better language detection
+    # ✅ Improved language detection (supports Bangla, Hindi, etc.)
     def detect_lang(self, text: str) -> str:
         try:
-            # Detect Hindi script
-            if any("\u0900" <= c <= "\u097F" for c in text):
-                return "hi"
-
             lang = detect(text)
 
-            # ❗ Fix wrong detection (like "so", "af", etc.)
-            if lang not in ["en", "hi"]:
+            # Normalize common codes
+            if lang.startswith("en"):
                 return "en"
+            if lang.startswith("hi"):
+                return "hi"
+            if lang.startswith("bn"):
+                return "bn"
 
-            return lang
+            return lang  # allow all languages
+
         except:
             return "en"
 
-    # ✅ Safe translation (ONLY when needed)
+    # ✅ Universal translation
     def translate(self, text: str, source="en", target="en"):
         if not text.strip() or source == target:
             return text
 
         try:
             prompt = f"""
-Translate the text strictly from {source} to {target}.
-Only return translated text. No explanation.
+Translate the following text from {source} to {target}.
+Return ONLY the translated text. No explanation.
 
 Text:
 {text}
@@ -50,22 +51,3 @@ Text:
         except Exception as e:
             print(f"❌ Translation error: {e}")
             return text
-
-    # ✅ Hinglish → English (ONLY when needed)
-    def hinglish_to_english(self, text: str):
-        try:
-            prompt = f"""
-Convert the following Hinglish/Hindi text into clear English.
-Do not add anything extra.
-
-Text:
-{text}
-"""
-            response = self.llm.invoke(prompt)
-            return response.content.strip()
-        except Exception as e:
-            print(f"❌ Hinglish conversion error: {e}")
-            return text
-
-    def english_to_hindi(self, text: str):
-        return self.translate(text, "en", "hi")
