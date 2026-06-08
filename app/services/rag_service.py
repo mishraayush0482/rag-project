@@ -1,11 +1,12 @@
 from langchain_community.document_loaders import TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.chains import ConversationalRetrievalChain
 from langchain.prompts import PromptTemplate
 from langchain.memory import ConversationBufferMemory
-from langchain_community.chat_models import ChatOpenAI
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_openai import ChatOpenAI
+
 
 from app.services.translation_service import TranslationService
 from app.config import settings
@@ -126,7 +127,7 @@ Answer:
             print(f"🔄 Query (EN): {text}")
 
             # 🔍 Debug retrieval
-            docs = self.qa_chain.retriever.get_relevant_documents(text)
+            docs = self.qa_chain.retriever.invoke(text)
 
             print("\n🔍 Retrieved Docs:\n")
             for i, d in enumerate(docs):
