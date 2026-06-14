@@ -2,6 +2,13 @@
 venv/
 __pycache__/
 *.pyc
+.vscode/
+
+# Ignore random pkl/faiss files
 *.faiss
 *.pkl
-.vscode/
+
+# BUT keep vector store
+!faiss_index/
+!faiss_index/index.faiss
+!faiss_index/index.pkl
