@@ -3,7 +3,8 @@ from langchain_community.vectorstores import FAISS
 from langchain.chains import ConversationalRetrievalChain
 from langchain.prompts import PromptTemplate
 from langchain.memory import ConversationBufferMemory
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_openai import ChatOpenAI
+from langchain_huggingface import HuggingFaceEmbeddings
 
 from app.services.translation_service import TranslationService
 from app.config import settings
@@ -14,9 +15,12 @@ class RAGService:
     def __init__(self):
         self.translator = TranslationService()
         self.qa_chain = None
+        self.retriever = None
         self.user_memories = {}
 
-    # ✅ Per-user memory
+    # =========================
+    # Per-user memory
+    # =========================
     def get_memory(self, user_id: str):
         if user_id not in self.user_memories:
             self.user_memories[user_id] = ConversationBufferMemory(
@@ -25,22 +29,26 @@ class RAGService:
             )
         return self.user_memories[user_id]
 
+    # =========================
+    # Initialize RAG
+    # =========================
     def initialize(self):
         try:
             logger.info("🚀 Initializing RAG service...")
 
-            # =========================
-            # 1) Load embeddings model
-            # =========================
+            # -------------------------------------------------
+            # 1) Load HuggingFace embeddings
+            # -------------------------------------------------
             # IMPORTANT:
-            # Use the SAME embedding model/API that was used while creating faiss_index
-            embeddings = OpenAIEmbeddings(
-                api_key=settings.OPENAI_API_KEY
+            # This MUST be the SAME embedding model that was used
+            # while creating the FAISS index.
+            embeddings = HuggingFaceEmbeddings(
+                model_name="sentence-transformers/all-MiniLM-L6-v2"
             )
 
-            # =========================
+            # -------------------------------------------------
             # 2) Load prebuilt FAISS index
-            # =========================
+            # -------------------------------------------------
             faiss_path = "faiss_index"
 
             if not os.path.exists(faiss_path):
@@ -57,20 +65,25 @@ class RAGService:
 
             logger.info("✅ FAISS vector store loaded successfully")
 
-            # =========================
-            # 3) LLM (OpenRouter)
-            # =========================
+            # -------------------------------------------------
+            # 3) LLM via OpenRouter
+            # -------------------------------------------------
+            if not settings.OPENROUTER_API_KEY:
+                raise ValueError("OPENROUTER_API_KEY is missing in environment variables")
+
             llm = ChatOpenAI(
                 model="meta-llama/llama-3-8b-instruct",
-                openai_api_base="https://openrouter.ai/api/v1",
-                openai_api_key=settings.OPENROUTER_API_KEY,
+                api_key=settings.OPENROUTER_API_KEY,
+                base_url="https://openrouter.ai/api/v1",
                 temperature=0,
-                request_timeout=30
+                timeout=30
             )
 
-            # =========================
+            logger.info("✅ OpenRouter LLM initialized successfully")
+
+            # -------------------------------------------------
             # 4) Prompt template
-            # =========================
+            # -------------------------------------------------
             prompt_template = """
 You are a helpful AI assistant.
 
@@ -93,20 +106,19 @@ Answer:
                 input_variables=["context", "question"]
             )
 
-            # =========================
+            # -------------------------------------------------
             # 5) Retriever
-            # =========================
+            # -------------------------------------------------
             retriever = vector_store.as_retriever(
                 search_type="similarity",
                 search_kwargs={"k": 3}
             )
 
-            # Save retriever separately for debug use
             self.retriever = retriever
 
-            # =========================
+            # -------------------------------------------------
             # 6) Conversational RAG chain
-            # =========================
+            # -------------------------------------------------
             self.qa_chain = ConversationalRetrievalChain.from_llm(
                 llm=llm,
                 retriever=retriever,
@@ -115,12 +127,16 @@ Answer:
             )
 
             logger.info("✅ RAG initialized successfully")
-            logger.info(f"OPENAI KEY PRESENT: {bool(settings.OPENAI_API_KEY)}")
+            logger.info(f"OPENROUTER KEY PRESENT: {bool(settings.OPENROUTER_API_KEY)}")
+
         except Exception as e:
             logger.error(f"❌ RAG init failed: {e}")
             self.qa_chain = None
+            self.retriever = None
 
-    # ✅ Query (multilingual)
+    # =========================
+    # Query RAG
+    # =========================
     def query(self, text: str, user_id: str):
         try:
             if not self.qa_chain:
@@ -128,66 +144,54 @@ Answer:
 
             memory = self.get_memory(user_id)
 
-            # =========================
             # 1) Detect language
-            # =========================
             source_lang = self.translator.detect_lang(text)
-            print(f"\n🌍 Detected Language: {source_lang}")
+            logger.info(f"🌍 Detected Language: {source_lang}")
 
             original_text = text
 
-            # =========================
             # 2) Translate to English if needed
-            # =========================
             if source_lang != "en":
                 text = self.translator.translate(text, source_lang, "en")
 
             text = text.lower().strip()
-            print(f"🔄 Query (EN): {text}")
+            logger.info(f"🔄 Query (EN): {text}")
 
-            # =========================
             # 3) Debug retrieval
-            # =========================
             try:
                 docs = self.retriever.invoke(text)
 
-                print("\n🔍 Retrieved Docs:\n")
+                logger.info("🔍 Retrieved Docs:")
                 for i, d in enumerate(docs):
-                    print(f"--- Doc {i+1} ---")
-                    print(d.page_content[:300])
-                    print()
-            except Exception as retrieval_error:
-                print(f"⚠️ Retrieval debug failed: {retrieval_error}")
+                    logger.info(f"--- Doc {i+1} ---")
+                    logger.info(d.page_content[:300])
 
-            # =========================
+            except Exception as retrieval_error:
+                logger.warning(f"⚠️ Retrieval debug failed: {retrieval_error}")
+
             # 4) Ask LLM
-            # =========================
             response = self.qa_chain.invoke({
                 "question": text,
                 "chat_history": memory.chat_memory.messages
             })
 
             answer = response["answer"].strip()
-            print("\n🤖 English Answer:", answer)
+            logger.info(f"🤖 English Answer: {answer}")
 
-            # =========================
             # 5) Translate back to original language
-            # =========================
             if source_lang != "en":
                 answer = self.translator.translate(answer, "en", source_lang)
 
-            print("\n🌍 Final Answer:", answer)
+            logger.info(f"🌍 Final Answer: {answer}")
 
-            # =========================
             # 6) Save conversation memory
-            # =========================
             memory.chat_memory.add_user_message(original_text)
             memory.chat_memory.add_ai_message(answer)
 
             return answer
 
         except Exception as e:
-            print(f"❌ Query failed: {e}")
+            logger.error(f"❌ Query failed: {e}")
             return "Error processing request"
 
 
