@@ -1,12 +1,12 @@
+import os
+
 from langchain_community.document_loaders import TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain.chains import ConversationalRetrievalChain
 from langchain.prompts import PromptTemplate
 from langchain.memory import ConversationBufferMemory
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_openai import ChatOpenAI
-
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
 from app.services.translation_service import TranslationService
 from app.config import settings
@@ -19,6 +19,10 @@ class RAGService:
         self.qa_chain = None
         self.user_memories = {}
 
+        # Paths
+        self.knowledge_file = "knowledge/data.txt"
+        self.vector_db_path = "knowledge/faiss_index"
+
     # ✅ Per-user memory
     def get_memory(self, user_id: str):
         if user_id not in self.user_memories:
@@ -30,32 +34,61 @@ class RAGService:
 
     def initialize(self):
         try:
-            # ✅ Load documents
-            loader = TextLoader("knowledge/data.txt", encoding="utf-8")
-            docs = loader.load()
+            logger.info("🚀 Initializing RAG service...")
 
-            print("\n✅ Loaded Documents:")
-            for d in docs:
-                print(d.page_content[:200])
-
-            # ✅ Chunking
-            splitter = RecursiveCharacterTextSplitter(
-                chunk_size=500,
-                chunk_overlap=100
-            )
-            chunks = splitter.split_documents(docs)
-
-            print(f"\n✅ Total Chunks Created: {len(chunks)}")
-
-            # ✅ Embeddings
-            embeddings = HuggingFaceEmbeddings(
-                model_name="sentence-transformers/all-MiniLM-L6-v2"
+            # ---------------------------------------------------
+            # 1) Use OpenAI embeddings instead of HuggingFace
+            #    This prevents Render OOM caused by loading
+            #    sentence-transformers/all-MiniLM-L6-v2
+            # ---------------------------------------------------
+            embeddings = OpenAIEmbeddings(
+                api_key=settings.OPENAI_API_KEY
             )
 
-            # ✅ Vector store
-            vector_store = FAISS.from_documents(chunks, embeddings)
+            # ---------------------------------------------------
+            # 2) Load existing FAISS vector store if already built
+            # ---------------------------------------------------
+            if os.path.exists(self.vector_db_path):
+                logger.info(f"📦 Loading existing vector DB from: {self.vector_db_path}")
 
-            # ✅ LLM (OpenRouter)
+                vector_store = FAISS.load_local(
+                    self.vector_db_path,
+                    embeddings,
+                    allow_dangerous_deserialization=True
+                )
+
+                logger.info("✅ Existing FAISS vector DB loaded successfully")
+
+            else:
+                logger.info("📄 No FAISS index found. Building a new one...")
+
+                # Load documents
+                loader = TextLoader(self.knowledge_file, encoding="utf-8")
+                docs = loader.load()
+
+                print("\n✅ Loaded Documents:")
+                for d in docs:
+                    print(d.page_content[:200])
+
+                # Chunking
+                splitter = RecursiveCharacterTextSplitter(
+                    chunk_size=500,
+                    chunk_overlap=100
+                )
+                chunks = splitter.split_documents(docs)
+
+                print(f"\n✅ Total Chunks Created: {len(chunks)}")
+
+                # Create vector store
+                vector_store = FAISS.from_documents(chunks, embeddings)
+
+                # Save vector store locally
+                vector_store.save_local(self.vector_db_path)
+                logger.info(f"✅ New FAISS vector DB created and saved to: {self.vector_db_path}")
+
+            # ---------------------------------------------------
+            # 3) LLM (OpenRouter)
+            # ---------------------------------------------------
             llm = ChatOpenAI(
                 model="meta-llama/llama-3-8b-instruct",
                 openai_api_base="https://openrouter.ai/api/v1",
@@ -64,13 +97,16 @@ class RAGService:
                 request_timeout=30
             )
 
-            # ✅ Prompt
+            # ---------------------------------------------------
+            # 4) Prompt
+            # ---------------------------------------------------
             prompt_template = """
 You are a helpful AI assistant.
 
 Answer ONLY using the given context.
 If answer is partially available, still answer.
 Do NOT hallucinate.
+If the answer is not present in the context, say clearly that the information is not available in the knowledge base.
 
 Context:
 {context}
@@ -86,13 +122,17 @@ Answer:
                 input_variables=["context", "question"]
             )
 
-            # ✅ Retriever
+            # ---------------------------------------------------
+            # 5) Retriever
+            # ---------------------------------------------------
             retriever = vector_store.as_retriever(
                 search_type="similarity",
                 search_kwargs={"k": 3}
             )
 
-            # ✅ Chain
+            # ---------------------------------------------------
+            # 6) Conversational RAG Chain
+            # ---------------------------------------------------
             self.qa_chain = ConversationalRetrievalChain.from_llm(
                 llm=llm,
                 retriever=retriever,
@@ -103,7 +143,8 @@ Answer:
             logger.info("✅ RAG initialized successfully")
 
         except Exception as e:
-            logger.error(f"❌ RAG init failed: {e}")
+            logger.exception(f"❌ RAG init failed: {e}")
+            self.qa_chain = None
 
     # ✅ Query (MULTILINGUAL FIXED)
     def query(self, text: str, user_id: str):
@@ -132,7 +173,7 @@ Answer:
             print("\n🔍 Retrieved Docs:\n")
             for i, d in enumerate(docs):
                 print(f"--- Doc {i+1} ---")
-                print(d.page_content[:200])
+                print(d.page_content[:300])
                 print()
 
             # 🤖 Ask LLM
@@ -157,7 +198,7 @@ Answer:
             return answer
 
         except Exception as e:
-            print(f"❌ Query failed: {e}")
+            logger.exception(f"❌ Query failed: {e}")
             return "Error processing request"
 
 
