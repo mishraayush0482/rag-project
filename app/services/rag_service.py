@@ -115,7 +115,7 @@ Answer:
             )
 
             logger.info("✅ RAG initialized successfully")
-
+            logger.info(f"OPENAI KEY PRESENT: {bool(settings.OPENAI_API_KEY)}")
         except Exception as e:
             logger.error(f"❌ RAG init failed: {e}")
             self.qa_chain = None
