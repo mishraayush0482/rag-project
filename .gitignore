@@ -4,6 +4,11 @@ __pycache__/
 *.pyc
 .vscode/
 
+.env
+.env.*
+!.env.example
+.DS_Store
+
 # Ignore random pkl/faiss files
 *.faiss
 *.pkl

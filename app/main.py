@@ -1,6 +1,9 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
+from app.auth.routes import router as auth_router
+from app.chat.routes import router as chat_router
 
 import os
 
@@ -57,9 +60,29 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# The browser frontend is served separately during development, so allow it to
+# call this API from the Vite/simple local server origins.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5500",
+        "http://127.0.0.1:5500",
+        "http://localhost:5501",
+        "http://127.0.0.1:5501",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Register routes
 app.include_router(whatsapp_router)
 
+app.include_router(auth_router)
+
+app.include_router(chat_router)
 
 # Health check route
 @app.get("/")
