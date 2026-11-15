@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RAG Assistant</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section id="login-view" class="login-view">
+        <div class="brand-panel">
+          <p class="eyebrow">Knowledge assistant</p>
+          <h1>RAG Chat Console</h1>
+          <p class="intro">
+            Sign in as a user to continue conversations, or as an admin to manage knowledge sources.
+          </p>
+          <div class="auth-note">
+            <span class="status-dot"></span>
+            Role-based access ready for MongoDB-backed authentication.
+          </div>
+        </div>
+
+        <form id="login-form" class="login-panel">
+          <label id="name-field" class="field hidden">
+            <span>Name</span>
+            <input id="name" type="text" autocomplete="name" />
+          </label>
+
+          <label class="field">
+            <span>Email</span>
+            <input id="email" type="email" autocomplete="email" required />
+          </label>
+
+          <label class="field">
+            <span>Password</span>
+            <input id="password" type="password" autocomplete="current-password" required />
+          </label>
+
+          <button class="primary-action" type="submit">
+            <span id="auth-submit-label">Sign in</span>
+            <span aria-hidden="true">-></span>
+          </button>
+
+          <button id="auth-mode-toggle" class="text-button" type="button">Need an account? Sign up</button>
+          <p class="form-helper">Your account is stored securely in MongoDB.</p>
+        </form>
+      </section>
+
+      <section id="workspace-view" class="workspace-view hidden">
+        <aside class="sidebar">
+          <div class="sidebar-head">
+            <div>
+              <p class="eyebrow">Signed in</p>
+              <h2 id="session-title">User console</h2>
+            </div>
+            <button id="logout-btn" class="icon-button" type="button" title="Log out" aria-label="Log out">
+              <span aria-hidden="true">x</span>
+            </button>
+          </div>
+
+          <nav id="admin-nav" class="tabs hidden" aria-label="Admin sections">
+            <button class="tab active" data-panel="chat-panel" type="button">Chat</button>
+            <button class="tab" data-panel="knowledge-panel" type="button">Knowledge</button>
+          </nav>
+
+          <div class="history-head">
+            <h3>Chat history</h3>
+            <button id="new-chat-btn" class="text-button" type="button">New</button>
+          </div>
+          <div id="history-list" class="history-list"></div>
+        </aside>
+
+        <section id="chat-panel" class="panel chat-panel">
+          <header class="panel-header">
+            <div>
+              <p class="eyebrow">Multilingual RAG</p>
+              <h2>Ask anything from your knowledge base</h2>
+            </div>
+            <span id="role-badge" class="role-badge">User</span>
+          </header>
+
+          <div id="messages" class="messages" aria-live="polite"></div>
+
+          <form id="chat-form" class="chat-composer">
+            <textarea
+              id="query-input"
+              rows="2"
+              placeholder="Ask in any language..."
+              required
+            ></textarea>
+            <button class="send-button" type="submit" title="Send message" aria-label="Send message">
+              <span aria-hidden="true">↑</span>
+            </button>
+          </form>
+        </section>
+
+        <section id="knowledge-panel" class="panel knowledge-panel hidden">
+          <header class="panel-header">
+            <div>
+              <p class="eyebrow">Admin upload</p>
+              <h2>Add data to the knowledge section</h2>
+            </div>
+          </header>
+
+          <div class="upload-grid">
+            <form id="text-upload-form" class="upload-box">
+              <div class="box-head">
+                <span class="box-icon" aria-hidden="true">T</span>
+                <div>
+                  <h3>Raw text</h3>
+                  <p>Paste notes, policies, FAQs, or product information.</p>
+                </div>
+              </div>
+              <label class="field">
+                <span>Title</span>
+                <input id="text-title" type="text" placeholder="Example: Refund policy" required />
+              </label>
+              <label class="field">
+                <span>Knowledge text</span>
+                <textarea id="raw-text" rows="9" placeholder="Paste text here..." required></textarea>
+              </label>
+              <button class="secondary-action" type="submit">Upload text</button>
+            </form>
+
+            <form id="pdf-upload-form" class="upload-box">
+              <div class="box-head">
+                <span class="box-icon" aria-hidden="true">P</span>
+                <div>
+                  <h3>PDF document</h3>
+                  <p>Upload a PDF for backend scraping, chunking, and embedding.</p>
+                </div>
+              </div>
+              <label class="drop-zone" for="pdf-file">
+                <input id="pdf-file" type="file" accept="application/pdf" required />
+                <span class="drop-title">Choose PDF</span>
+                <span id="pdf-file-name">No file selected</span>
+              </label>
+              <button class="secondary-action" type="submit">Upload PDF</button>
+            </form>
+          </div>
+
+          <div id="upload-status" class="upload-status">Knowledge uploads will appear here.</div>
+        </section>
+      </section>
+    </main>
+
+    <script src="./api.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
