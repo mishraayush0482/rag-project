@@ -71,6 +71,7 @@ app.add_middleware(
         "http://127.0.0.1:5500",
         "http://localhost:5501",
         "http://127.0.0.1:5501",
+        "https://rag-project-frontend-r4d8.onrender.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
