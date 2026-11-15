@@ -1,6 +1,6 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 
-
+email-validator==2.2.0
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 
